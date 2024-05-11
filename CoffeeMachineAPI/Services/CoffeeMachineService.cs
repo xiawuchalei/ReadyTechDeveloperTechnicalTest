@@ -35,10 +35,22 @@ namespace CoffeeMachineAPI.Services
                 return (503, "");
             }
 
-            string message = "Your piping hot coffee is ready";
+            // Check weather and decide on coffee type
+            decimal temperature = await GetTemperature();
+            string message = temperature > 30 ? "Your refreshing iced coffee is ready" : "Your piping hot coffee is ready";
             string responseContent = $"{{ \"message\": \"{message}\", \"prepared\": \"{DateTime.UtcNow:O}\" }}";
 
             return (200, responseContent);
+        }
+
+        private async Task<decimal> GetTemperature()
+        {
+            var url = $"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={ApiKey}";
+            var response = await httpClient.GetStringAsync(url);
+            var weatherData = JsonConvert.DeserializeObject<dynamic>(response);
+            decimal tempKelvin = (decimal)weatherData.current.temp;
+            decimal temp = tempKelvin - 273.15m;
+            return temp;
         }
     }
 }
