@@ -23,31 +23,22 @@ namespace CoffeeMachineAPI.Services
         {
             requestCount++;
 
+            // Check if the date is April 1st, then all calls should return 418
             if (DateTime.Today.Month == 4 && DateTime.Today.Day == 1)
             {
                 return (418, "");
             }
 
+            // Check if the coffee machine needs to be refilled every fifth request
             if (requestCount % 5 == 0)
             {
                 return (503, "");
             }
 
-            // Check weather and decide on coffee type
-            decimal temperature = await GetTemperature();
-            string message = temperature > 30 ? "Your refreshing iced coffee is ready" : "Your piping hot coffee is ready";
+            string message = "Your piping hot coffee is ready";
+            string responseContent = $"{{ \"message\": \"{message}\", \"prepared\": \"{DateTime.UtcNow:O}\" }}";
 
-            return (200, message);
-        }
-
-        private async Task<decimal> GetTemperature()
-        {
-            var url = $"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={ApiKey}";
-            var response = await httpClient.GetStringAsync(url);
-            var weatherData = JsonConvert.DeserializeObject<dynamic>(response);
-            decimal tempKelvin = (decimal)weatherData.current.temp;
-            decimal temp = tempKelvin - 273.15m;
-            return temp;
+            return (200, responseContent);
         }
     }
 }
