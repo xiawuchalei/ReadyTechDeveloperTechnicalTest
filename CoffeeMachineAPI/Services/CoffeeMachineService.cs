@@ -1,56 +1,50 @@
-using System;
-using System.Net.Http;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
+using CoffeeMachineAPI.Exceptions;
+using CoffeeMachineAPI.Factories;
+using CoffeeMachineAPI.Models;
 
 namespace CoffeeMachineAPI.Services
 {
-    public class CoffeeMachineService
+    public class CoffeeMachineService: ICoffeeMachineService
     {
         private static int requestCount = 0;
-        private readonly HttpClient httpClient;
-        private const string ApiKey = "6c8a0597fb37a6d886b23cb3779e2794";
-        private const string lat = "-37.787003";
-        private const string lon = "175.279251";
+        private readonly IWeatherService weatherService;
+        private readonly CoffeeBrewingStrategyFactory strategyFactory;
 
-
-        public CoffeeMachineService(HttpClient httpClient)
+        public CoffeeMachineService(IWeatherService weatherService,
+                                    CoffeeBrewingStrategyFactory strategyFactory)
         {
-            this.httpClient = httpClient;
+            this.weatherService = weatherService;
+            this.strategyFactory = strategyFactory;
+            requestCount = 0;
         }
 
-        public async Task<(int StatusCode, string ResponseContent)> BrewCoffee()
+        async Task<BrewCoffeeResponse> ICoffeeMachineService.BrewCoffee(decimal lat, decimal lon, DateTime date)
         {
+            if (date > DateTime.Now)
+            {
+                throw new ArgumentException("Date cannot be in the future");
+            }
+
             requestCount++;
 
-            // Check if the date is April 1st, then all calls should return 418
-            if (DateTime.Today.Month == 4 && DateTime.Today.Day == 1)
+            if (date.Month == 4 && date.Day == 1)
             {
-                return (418, "");
+                throw new HttpStatusException(418, "I'm a teapot");
             }
 
-            // Check if the coffee machine needs to be refilled every fifth request
             if (requestCount % 5 == 0)
             {
-                return (503, "");
+                throw new HttpStatusException(503, "Service Unavailable - Coffee machine needs maintenance");
             }
 
-            // Check weather and decide on coffee type
-            decimal temperature = await GetTemperature();
-            string message = temperature > 30 ? "Your refreshing iced coffee is ready" : "Your piping hot coffee is ready";
-            string responseContent = $"{{ \"message\": \"{message}\", \"prepared\": \"{DateTime.UtcNow:O}\" }}";
-
-            return (200, responseContent);
-        }
-
-        private async Task<decimal> GetTemperature()
-        {
-            var url = $"https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={ApiKey}";
-            var response = await httpClient.GetStringAsync(url);
-            var weatherData = JsonConvert.DeserializeObject<dynamic>(response);
-            decimal tempKelvin = (decimal)weatherData.current.temp;
-            decimal temp = tempKelvin - 273.15m;
-            return temp;
+            decimal temperature = await weatherService.GetCurrentTemperature(lat, lon);
+            var strategy = strategyFactory.GetBrewingStrategy(temperature);
+            var offset = TimeZoneInfo.Local.GetUtcOffset(DateTime.Now);
+            var offsetString = (offset > TimeSpan.Zero ? "+" : "-") + offset.ToString("hhmm");
+            return new BrewCoffeeResponse { 
+                Message = strategy.Brew(), 
+                Prepared = DateTime.Now.ToString("yyyy-MM-dd'T'HH:mm:ss") + offsetString
+                };
         }
     }
 }
